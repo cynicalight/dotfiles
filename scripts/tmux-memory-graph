@@ -2,7 +2,7 @@
 
 set -u
 
-sample_count=12
+sample_count=8
 user_id="$(id -u)"
 server_id="${1:-standalone}"
 
