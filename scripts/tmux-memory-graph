@@ -3,7 +3,6 @@
 set -u
 
 sample_count=8
-minimum_range=100 # 10%, expressed in tenths of a percentage point
 user_id="$(id -u)"
 server_id="${1:-standalone}"
 
@@ -12,7 +11,7 @@ case "$server_id" in
 esac
 
 # Version the state path so metric changes never mix incompatible history.
-state_file="${TMPDIR:-/tmp}/tmux-memory-graph-v2-${user_id}-${server_id}.state"
+state_file="${TMPDIR:-/tmp}/tmux-memory-graph-v3-${user_id}-${server_id}.state"
 temporary_state="${state_file}.$$"
 lock_file="${state_file}.lock"
 
@@ -27,8 +26,7 @@ cleanup() {
 }
 
 memory_usage_metrics() {
-  total_bytes="$(sysctl -n hw.memsize 2>/dev/null)"
-  vm_stat 2>/dev/null | awk -v total_bytes="$total_bytes" '
+  vm_stat 2>/dev/null | awk '
     /page size of/ {
       page_size = $8
     }
@@ -45,12 +43,12 @@ memory_usage_metrics() {
       sub(/\.$/, "", compressed_pages)
     }
     END {
-      if (total_bytes > 0 && page_size > 0) {
+      if (page_size > 0) {
         # Match Activity Monitor: app (anonymous) + wired + compressed memory.
         used_bytes = (anonymous_pages + wired_pages + compressed_pages) * page_size
-        used_tenths = (used_bytes * 1000 / total_bytes)
         gibibyte = 1024 * 1024 * 1024
-        printf "%d %.1fGB\n", used_tenths + 0.5, used_bytes / gibibyte
+        used_decigibibytes = int(used_bytes * 10 / gibibyte + 0.5)
+        printf "%d %d.%dGB\n", used_decigibibytes, int(used_decigibibytes / 10), used_decigibibytes % 10
       }
     }
   '
@@ -73,10 +71,6 @@ case "$memory_label" in
     exit 0
     ;;
 esac
-
-if [ "$usage" -gt 1000 ]; then
-  usage=1000
-fi
 
 lock_acquired=false
 attempt=0
@@ -123,21 +117,25 @@ graph=""
 minimum="$(printf '%s\n' "$history" | awk '{ min = $1; for (i = 2; i <= NF; i++) if ($i < min) min = $i; print min }')"
 maximum="$(printf '%s\n' "$history" | awk '{ max = $1; for (i = 2; i <= NF; i++) if ($i > max) max = $i; print max }')"
 
-if [ $((maximum - minimum)) -lt "$minimum_range" ]; then
+# Each vertical step represents exactly 0.1 GiB; eight glyphs span 0.7 GiB.
+if [ $((maximum - minimum)) -le 7 ]; then
   midpoint=$(((minimum + maximum) / 2))
-  minimum=$((midpoint - minimum_range / 2))
-  maximum=$((minimum + minimum_range))
-  if [ "$minimum" -lt 0 ]; then
-    minimum=0
-    maximum=$minimum_range
-  elif [ "$maximum" -gt 1000 ]; then
-    minimum=$((1000 - minimum_range))
-    maximum=1000
-  fi
+  minimum=$((midpoint - 3))
+else
+  minimum=$((maximum - 7))
+fi
+
+if [ "$minimum" -lt 0 ]; then
+  minimum=0
 fi
 
 for value in $history; do
-  level=$(((value - minimum) * 7 / (maximum - minimum)))
+  level=$((value - minimum))
+  if [ "$level" -lt 0 ]; then
+    level=0
+  elif [ "$level" -gt 7 ]; then
+    level=7
+  fi
   case "$level" in
     0) bar='▁' ;;
     1) bar='▂' ;;
