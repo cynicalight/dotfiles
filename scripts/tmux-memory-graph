@@ -1,0 +1,153 @@
+#!/bin/sh
+
+set -u
+
+sample_count=12
+user_id="$(id -u)"
+server_id="${1:-standalone}"
+
+case "$server_id" in
+  *[!0-9]*) server_id=standalone ;;
+esac
+
+# Version the state path so metric changes never mix incompatible history.
+state_file="${TMPDIR:-/tmp}/tmux-memory-graph-v2-${user_id}-${server_id}.state"
+temporary_state="${state_file}.$$"
+lock_file="${state_file}.lock"
+
+umask 077
+
+cleanup() {
+  lock_owner="$(cat "$lock_file" 2>/dev/null || true)"
+  if [ "$lock_owner" = "$$" ]; then
+    rm -f "$lock_file"
+  fi
+  rm -f "$temporary_state"
+}
+
+memory_usage_metrics() {
+  total_bytes="$(sysctl -n hw.memsize 2>/dev/null)"
+  vm_stat 2>/dev/null | awk -v total_bytes="$total_bytes" '
+    /page size of/ {
+      page_size = $8
+    }
+    /Anonymous pages:/ {
+      anonymous_pages = $3
+      sub(/\.$/, "", anonymous_pages)
+    }
+    /Pages wired down:/ {
+      wired_pages = $4
+      sub(/\.$/, "", wired_pages)
+    }
+    /Pages occupied by compressor:/ {
+      compressed_pages = $5
+      sub(/\.$/, "", compressed_pages)
+    }
+    END {
+      if (total_bytes > 0 && page_size > 0) {
+        # Match Activity Monitor: app (anonymous) + wired + compressed memory.
+        used_bytes = (anonymous_pages + wired_pages + compressed_pages) * page_size
+        used_tenths = (used_bytes * 1000 / total_bytes)
+        gibibyte = 1024 * 1024 * 1024
+        printf "%d %.1fGB\n", used_tenths + 0.5, used_bytes / gibibyte
+      }
+    }
+  '
+}
+
+metrics="$(memory_usage_metrics)"
+usage="${metrics%% *}"
+memory_label="${metrics#* }"
+
+case "$usage" in
+  ''|*[!0-9]*)
+    printf '%s\n' 'memory unavailable'
+    exit 0
+    ;;
+esac
+
+case "$memory_label" in
+  ''|*[!0-9./A-Z]*)
+    printf '%s\n' 'memory unavailable'
+    exit 0
+    ;;
+esac
+
+if [ "$usage" -gt 1000 ]; then
+  usage=1000
+fi
+
+lock_acquired=false
+attempt=0
+while [ "$attempt" -lt 5 ]; do
+  if shlock -f "$lock_file" -p "$$"; then
+    lock_acquired=true
+    trap cleanup EXIT HUP INT TERM
+    break
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.02
+done
+
+history=""
+if [ -r "$state_file" ]; then
+  history="$(tr -cd '0-9 \n' < "$state_file")"
+fi
+
+if [ -z "$history" ]; then
+  index=0
+  while [ "$index" -lt "$sample_count" ]; do
+    history="${history}${history:+ }${usage}"
+    index=$((index + 1))
+  done
+else
+  history="$(printf '%s %s\n' "$history" "$usage" | awk -v count="$sample_count" '
+    {
+      start = NF - count + 1
+      if (start < 1) start = 1
+      for (i = start; i <= NF; i++) {
+        printf "%s%s", (i == start ? "" : " "), $i
+      }
+      print ""
+    }
+  ')"
+fi
+
+if [ "$lock_acquired" = true ]; then
+  printf '%s\n' "$history" > "$temporary_state"
+  mv "$temporary_state" "$state_file"
+fi
+
+graph=""
+minimum="$(printf '%s\n' "$history" | awk '{ min = $1; for (i = 2; i <= NF; i++) if ($i < min) min = $i; print min }')"
+maximum="$(printf '%s\n' "$history" | awk '{ max = $1; for (i = 2; i <= NF; i++) if ($i > max) max = $i; print max }')"
+
+if [ $((maximum - minimum)) -lt 10 ]; then
+  midpoint=$(((minimum + maximum) / 2))
+  minimum=$((midpoint - 5))
+  maximum=$((minimum + 10))
+  if [ "$minimum" -lt 0 ]; then
+    minimum=0
+    maximum=10
+  elif [ "$maximum" -gt 1000 ]; then
+    minimum=990
+    maximum=1000
+  fi
+fi
+
+for value in $history; do
+  level=$(((value - minimum) * 7 / (maximum - minimum)))
+  case "$level" in
+    0) bar='▁' ;;
+    1) bar='▂' ;;
+    2) bar='▃' ;;
+    3) bar='▄' ;;
+    4) bar='▅' ;;
+    5) bar='▆' ;;
+    6) bar='▇' ;;
+    *) bar='█' ;;
+  esac
+  graph="${graph}${bar}"
+done
+
+printf '%s %s\n' "$graph" "$memory_label"
