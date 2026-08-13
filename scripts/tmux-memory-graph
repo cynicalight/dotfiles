@@ -48,7 +48,8 @@ memory_usage_metrics() {
         used_bytes = (anonymous_pages + wired_pages + compressed_pages) * page_size
         gibibyte = 1024 * 1024 * 1024
         used_decigibibytes = int(used_bytes * 10 / gibibyte + 0.5)
-        printf "%d %d.%dGB\n", used_decigibibytes, int(used_decigibibytes / 10), used_decigibibytes % 10
+        above_threshold = used_bytes > 16 * gibibyte ? 1 : 0
+        printf "%d %d %d.%dGB\n", used_decigibibytes, above_threshold, int(used_decigibibytes / 10), used_decigibibytes % 10
       }
     }
   '
@@ -56,7 +57,9 @@ memory_usage_metrics() {
 
 metrics="$(memory_usage_metrics)"
 usage="${metrics%% *}"
-memory_label="${metrics#* }"
+remaining_metrics="${metrics#* }"
+above_threshold="${remaining_metrics%% *}"
+memory_label="${remaining_metrics#* }"
 
 case "$usage" in
   ''|*[!0-9]*)
@@ -67,6 +70,14 @@ esac
 
 case "$memory_label" in
   ''|*[!0-9./A-Z]*)
+    printf '%s\n' 'memory unavailable'
+    exit 0
+    ;;
+esac
+
+case "$above_threshold" in
+  0|1) ;;
+  *)
     printf '%s\n' 'memory unavailable'
     exit 0
     ;;
@@ -149,4 +160,10 @@ for value in $history; do
   graph="${graph}${bar}"
 done
 
-printf '%s %s\n' "$graph" "$memory_label"
+if [ "$above_threshold" -eq 1 ]; then
+  graph_colour='#F8C8C7'
+else
+  graph_colour='#C2EDB2'
+fi
+
+printf '#[fg=%s]%s#[fg=#cdd6f4] %s\n' "$graph_colour" "$graph" "$memory_label"
