@@ -1,0 +1,40 @@
+modelRoles:
+  default: openai-codex/gpt-6.1-sol:medium
+  task: openai-codex/gpt-6.1-sol:medium
+  plan: openai-codex/gpt-6-astra:high
+  vision: openai-codex/gpt-6.1-terra:medium
+  slow: openai-codex/gpt-6-astra:high
+  review: openai-codex/gpt-6-astra:medium
+  claude: anthropic/claude-opus-5-5:medium
+  design: anthropic/claude-opus-5-5:medium
+  video: anthropic/claude-opus-5-5:medium
+  write: anthropic/claude-sonnet-5-5:medium
+  advisor: anthropic/claude-opus-5-5:medium
+  smol: openai-codex/gpt-6.1-terra:low
+  commit: magpie/grok/grok-4.7-build-fast:low
+  widget: magpie/grok/grok-4.7-build-fast:low
+  grok: magpie/grok/grok-4.7:medium
+  deepseek: deepseek/deepseek-v4-pro:medium
+composer:
+  shape: claude
+  tokenRate: true
+theme:
+  light: light-dawn
+  dark: sandstone
+update:
+  auto: false
+setupVersion: 3
+task:
+  agentModelOverrides:
+    reviewer: "@review"
+    security-reviewer: "@review"
+    scout: "@default"
+    task: "@task"
+    sonic: "@smol"
+cycleOrder:
+  - smol
+  - default
+  - plan
+  - design
+dev:
+  autoqaConsent: granted

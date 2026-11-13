@@ -1,0 +1,11 @@
+# Only explicitly approved portable configuration belongs in this repository.
+/*
+!/.gitignore
+!/install.sh
+!/README.md
+!/config.yml
+!/agents/
+/agents/*
+!/agents/frontend.md
+!/agents/designer.md
+!/agents/writer.md
