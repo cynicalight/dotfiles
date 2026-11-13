@@ -15,6 +15,7 @@ modelRoles:
   widget: magpie/grok/grok-4.7-build-fast:low
   grok: magpie/grok/grok-4.7:medium
   deepseek: deepseek/deepseek-v4-pro:medium
+  image: openai-codex/gpt-image-2
 composer:
   shape: claude
   tokenRate: true
@@ -38,3 +39,5 @@ cycleOrder:
   - design
 dev:
   autoqaConsent: granted
+generate_image:
+  enabled: true
