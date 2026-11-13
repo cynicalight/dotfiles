@@ -1,0 +1,11 @@
+.git/
+.claude/
+.DS_Store
+*.spl
+*.swp
+*.swo
+*~
+/session.vim
+/Session.vim
+/lazy.nvim/
+/.lazy/
