@@ -1,10 +1,10 @@
 modelRoles:
-  default: openai-codex/gpt-6.1-sol:medium
-  task: openai-codex/gpt-6.1-sol:medium
-  plan: openai-codex/gpt-6-astra:high
+  default: openai-codex/gpt-6.2-sol:medium
+  task: openai-codex/gpt-6.2-sol:medium
+  plan: openai-codex/gpt-6.2-astra:high
   vision: openai-codex/gpt-6.1-terra:medium
-  slow: openai-codex/gpt-6-astra:high
-  review: openai-codex/gpt-6-astra:medium
+  slow: openai-codex/gpt-6.2-astra:high
+  review: openai-codex/gpt-6.2-astra:medium
   claude: anthropic/claude-opus-5-5:medium
   design: anthropic/claude-opus-5-5:medium
   video: anthropic/claude-opus-5-5:medium
